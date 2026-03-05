@@ -1,4 +1,4 @@
-name: "Build"
+name: "Build & Test"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -17,11 +17,48 @@ on:
       - '!ci_test_*'
 
 jobs:
-  build:
-    name: Build
+  native:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            os: ubuntu-latest
+          - name: Linux aarch64
+            os: ubuntu-24.04-arm
+          - name: Windows x86_64
+            os: windows-latest
+          - name: Windows aarch64
+            os: windows-11-arm
+          - name: macOS aarch64
+            os: macos-latest
+          - name: macOS x86_64
+            os: macos-26-intel
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: cargo build --all-features
+      - run: cargo test --all-features
+      - run: cargo build --no-default-features
+      - run: cargo clippy --all-features -- -D warnings
+
+  fmt:
+    name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt
+      - run: cargo fmt --check
+
+  cross-compile:
+    name: Cross-compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       - run: rustup target add aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu i686-unknown-linux-gnu powerpc-unknown-linux-gnu
       - run: RUSTFLAGS="-C target-feature=+neon" cargo build --all-features --target aarch64-unknown-linux-gnu
@@ -30,5 +67,3 @@ jobs:
       - run: cargo build --target powerpc-unknown-linux-gnu --no-default-features
       - run: RUSTFLAGS="-C target-feature=+sse4.1" cargo build --all-features --target x86_64-unknown-linux-gnu
       - run: RUSTFLAGS="-C target-feature=+avx2" cargo build --all-features --target x86_64-unknown-linux-gnu
-      - name: Test release pipeline
-        run: cargo publish --dry-run
